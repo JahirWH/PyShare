@@ -2,18 +2,124 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>My local server</title>
+  <title> PyShare</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
       font-family: sans-serif;
-      background: #f5f5f5;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 1rem;
+    }
+
+    h1 {
       text-align: center;
-      padding: 50px;
+      color: #333;
+    }
+
+    .file-list {
+      max-width: 600px;
+      margin: 2rem auto;
+      background: white;
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    .file {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .file:last-child {
+      border-bottom: none;
+    }
+
+    .file-name {
+      word-break: break-all;
+    }
+
+    .btn {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 0.4rem 0.7rem;
+      border-radius: 5px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .btn:hover {
+      background: #0056b3;
+    }
+
+    footer {
+      margin-top: 3rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: #999;
+    }
+
+    @media (max-width: 600px) {
+      .file-list {
+        margin: 1rem;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>Server local running here</h1>
-  <p>Welcome! dowload and up your files</p>
+  <h1> Archivos disponibles</h1>
+
+  <div class="file-list" id="files">
+    <p>Cargando archivos...</p>
+  </div>
+
+  <footer>
+    PyShare local - <a href="/upload.html">Subir archivo</a> | <a href="  /index.html">Inicio</a><br>
+  </footer>
+
+  <script>
+    async function cargarArchivos() {
+      try {
+        const res = await fetch('/api/files');
+        const archivos = await res.json();
+        const contenedor = document.getElementById('files');
+        contenedor.innerHTML = '';
+
+        if (archivos.length === 0) {
+          contenedor.innerHTML = '<p>No hay archivos disponibles.</p>';
+          return;
+        }
+
+        archivos.forEach(archivo => {
+          const item = document.createElement('div');
+          item.className = 'file';
+
+          const nombre = document.createElement('div');
+          nombre.className = 'file-name';
+          nombre.textContent = archivo.name;
+
+          const link = document.createElement('a');
+          link.className = 'btn';
+          link.textContent = 'Descargar';
+          link.href = '/' + archivo.path;
+          link.download = archivo.name;
+
+          item.appendChild(nombre);
+          item.appendChild(link);
+          contenedor.appendChild(item);
+        });
+      } catch (err) {
+        document.getElementById('files').innerHTML = '<p>Error cargando archivos.</p>';
+        console.error(err);
+      }
+    }
+
+    cargarArchivos();
+  </script>
 </body>
 </html>
