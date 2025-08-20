@@ -422,7 +422,7 @@ class PhotoTransferServer:
     def update_gui_stats(self):
         """Actualiza las estadísticas en la GUI"""
         self.photos_label.configure(text=f"📸 Fotos: {self.stats['photos']}")
-        self.size_label.configure(text=f"💾 Tamaño total: {self.format_size(self.stats['size'])}")
+        self.size_label.configure(text=f" Tamaño total: {self.format_size(self.stats['size'])}")
         self.uploads_label.configure(text=f"📤 Subidas: {self.stats['uploads']}")
     
     def on_closing(self):
