@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, filedialog
 import threading
 import webbrowser
 import os
+import sys
 import socket
 from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory
@@ -263,10 +264,10 @@ class PhotoTransferServer:
     
     def get_local_ip(self):
         try:
-            with socket.socket(socket.AF_INET, socket.AF_DGRAM) as s:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.connect(("8.8.8.8", 80))
                 return s.getsockname()[0]
-        except:
+        except Exception:
             return "127.0.0.1"
     
     def update_stats(self):
@@ -283,7 +284,7 @@ class PhotoTransferServer:
     def setup_gui(self):
         """Configura la interfaz gráfica"""
         self.root = tk.Tk()
-        self.root.title("📸 Servidor de Transferencia de Fotos")
+        self.root.title(" Servidor de Transferencia de Fotos")
         self.root.geometry("600x500")
         self.root.configure(bg='#2c3e50')
         
@@ -300,7 +301,7 @@ class PhotoTransferServer:
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Título
-        title_label = ttk.Label(main_frame, text="📸 Servidor de Transferencia iPhone → Laptop", style='Title.TLabel')
+        title_label = ttk.Label(main_frame, text=" Servidor de Transferencia iPhone → Laptop", style='Title.TLabel')
         title_label.pack(pady=(0, 20))
         
         # Frame de información
@@ -310,7 +311,7 @@ class PhotoTransferServer:
         self.ip_label = ttk.Label(info_frame, text=f"🌐 IP Local: {self.get_local_ip()}:{self.PORT}", style='Info.TLabel')
         self.ip_label.pack(anchor=tk.W, padx=10, pady=5)
         
-        self.folder_label = ttk.Label(info_frame, text=f"📁 Carpeta: {Path(self.UPLOAD_FOLDER).absolute()}", style='Info.TLabel')
+        self.folder_label = ttk.Label(info_frame, text=f" Carpeta: {Path(self.UPLOAD_FOLDER).absolute()}", style='Info.TLabel')
         self.folder_label.pack(anchor=tk.W, padx=10, pady=5)
         
         self.status_label = ttk.Label(info_frame, text="⏹️ Estado: Detenido", style='Info.TLabel')
@@ -320,10 +321,10 @@ class PhotoTransferServer:
         stats_frame = tk.LabelFrame(main_frame, text="📈 Estadísticas", bg='#34495e', fg='white', font=('Arial', 10, 'bold'))
         stats_frame.pack(fill=tk.X, pady=(0, 20))
         
-        self.photos_label = ttk.Label(stats_frame, text="📸 Fotos: 0", style='Info.TLabel')
+        self.photos_label = ttk.Label(stats_frame, text=" Fotos: 0", style='Info.TLabel')
         self.photos_label.pack(anchor=tk.W, padx=10, pady=2)
         
-        self.size_label = ttk.Label(stats_frame, text="💾 Tamaño total: 0B", style='Info.TLabel')
+        self.size_label = ttk.Label(stats_frame, text=" Tamaño total: 0B", style='Info.TLabel')
         self.size_label.pack(anchor=tk.W, padx=10, pady=2)
         
         self.uploads_label = ttk.Label(stats_frame, text="📤 Subidas: 0", style='Info.TLabel')
@@ -333,15 +334,15 @@ class PhotoTransferServer:
         controls_frame = tk.Frame(main_frame, bg='#2c3e50')
         controls_frame.pack(fill=tk.X, pady=(0, 20))
         
-        self.start_btn = ttk.Button(controls_frame, text="🚀 Iniciar Servidor", command=self.toggle_server, style='Start.TButton')
+        self.start_btn = ttk.Button(controls_frame, text=" Iniciar Servidor", command=self.toggle_server, style='Start.TButton')
         self.start_btn.pack(side=tk.LEFT, padx=(0, 10))
         
         ttk.Button(controls_frame, text="🌐 Abrir Web", command=self.open_browser).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(controls_frame, text="📁 Abrir Carpeta", command=self.open_folder).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(controls_frame, text="🔄 Actualizar", command=self.update_stats).pack(side=tk.LEFT)
+        ttk.Button(controls_frame, text=" Abrir Carpeta", command=self.open_folder).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(controls_frame, text=" Actualizar", command=self.update_stats).pack(side=tk.LEFT)
         
         # Log
-        log_frame = tk.LabelFrame(main_frame, text="📝 Log del Servidor", bg='#34495e', fg='white', font=('Arial', 10, 'bold'))
+        log_frame = tk.LabelFrame(main_frame, text=" Log del Servidor", bg='#34495e', fg='white', font=('Arial', 10, 'bold'))
         log_frame.pack(fill=tk.BOTH, expand=True)
         
         self.log_text = tk.Text(log_frame, height=12, bg='#2c3e50', fg='#ecf0f1', font=('Consolas', 9))
@@ -382,8 +383,8 @@ class PhotoTransferServer:
             self.status_label.configure(text="✅ Estado: Ejecutándose", style='Success.TLabel')
             
             ip = self.get_local_ip()
-            self.log(f"🚀 Servidor iniciado en http://{ip}:{self.PORT}")
-            self.log(f"📱 URL para iPhone: http://{ip}:{self.PORT}")
+            self.log(f" Servidor iniciado en http://{ip}:{self.PORT}")
+            self.log(f" URL para iPhone: http://{ip}:{self.PORT}")
             self.log(f"💻 URL para PC: http://localhost:{self.PORT}")
             
         except Exception as e:
@@ -400,7 +401,7 @@ class PhotoTransferServer:
     def stop_server(self):
         """Detiene el servidor"""
         self.is_running = False
-        self.start_btn.configure(text="🚀 Iniciar Servidor")
+        self.start_btn.configure(text=" Iniciar Servidor")
         self.status_label.configure(text="⏹️ Estado: Detenido", style='Info.TLabel')
         self.log("⏹️ Servidor detenido")
     
@@ -421,7 +422,7 @@ class PhotoTransferServer:
     
     def update_gui_stats(self):
         """Actualiza las estadísticas en la GUI"""
-        self.photos_label.configure(text=f"📸 Fotos: {self.stats['photos']}")
+        self.photos_label.configure(text=f" Fotos: {self.stats['photos']}")
         self.size_label.configure(text=f" Tamaño total: {self.format_size(self.stats['size'])}")
         self.uploads_label.configure(text=f"📤 Subidas: {self.stats['uploads']}")
     
@@ -433,7 +434,7 @@ class PhotoTransferServer:
     
     def run(self):
         """Inicia la aplicación"""
-        self.log("🎯 Aplicación iniciada - Haz clic en 'Iniciar Servidor' para comenzar")
+        self.log(" Aplicación iniciada - Haz clic en 'Iniciar Servidor' para comenzar")
         self.root.mainloop()
 
 if __name__ == "__main__":
