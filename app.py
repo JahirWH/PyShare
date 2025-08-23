@@ -71,201 +71,331 @@ class PhotoTransferServer:
         def index():
             return '''
             <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>📸 Transferir Fotos iPhone</title>
-                <style>
-                    * { box-sizing: border-box; margin: 0; padding: 0; }
-                    body { 
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        min-height: 100vh; padding: 20px; color: white;
-                    }
-                    .container { 
-                        max-width: 600px; margin: 0 auto; 
-                        background: rgba(255,255,255,0.1); 
-                        padding: 30px; border-radius: 20px; 
-                        backdrop-filter: blur(10px);
-                    }
-                    h1 { text-align: center; margin-bottom: 30px; font-size: 2.5em; }
-                    .drop-zone {
-                        border: 3px dashed rgba(255,255,255,0.5);
-                        padding: 60px 20px; text-align: center;
-                        border-radius: 15px; margin: 20px 0;
-                        transition: all 0.3s ease;
-                    }
-                    .drop-zone:hover { border-color: white; background: rgba(255,255,255,0.1); }
-                    .drop-zone.dragover { border-color: #00ff88; background: rgba(0,255,136,0.2); }
-                    input[type="file"] { display: none; }
-                    .upload-btn {
-                        background: linear-gradient(45deg, #00ff88, #00d4ff);
-                        color: white; border: none; padding: 15px 30px;
-                        border-radius: 25px; font-size: 18px; cursor: pointer;
-                        transition: transform 0.2s;
-                    }
-                    .upload-btn:hover { transform: translateY(-2px); }
-                    .progress { 
-                        width: 100%; height: 8px; background: rgba(255,255,255,0.3);
-                        border-radius: 4px; margin: 20px 0; overflow: hidden; display: none;
-                    }
-                    .progress-bar { 
-                        height: 100%; background: linear-gradient(90deg, #00ff88, #00d4ff);
-                        width: 0%; transition: width 0.3s;
-                    }
-                    .status { text-align: center; margin: 20px 0; font-size: 16px; }
-                    .file-list { margin-top: 20px; }
-                    .file-item {
-                        background: rgba(255,255,255,0.1); padding: 10px;
-                        margin: 5px 0; border-radius: 8px; display: flex;
-                        justify-content: space-between; align-items: center;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>📸 Transferir Fotos</h1>
-                    <div class="drop-zone" id="dropZone">
-                        <p>📱 Arrastra fotos y videos aquí o haz clic para seleccionar</p>
-                        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
-                            Seleccionar Archivos
-                        </button>
-                        <input type="file" id="fileInput" multiple accept="image/*,video/*">
-                    </div>
-                    <div class="progress" id="progressContainer">
-                        <div class="progress-bar" id="progressBar"></div>
-                    </div>
-                    <div class="status" id="status"></div>
-                    <div class="file-list" id="fileList"></div>
-                </div>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transferir Fotos</title>
+    <style>
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+        }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #fafafa;
+            color: #333;
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+        
+        .container { 
+            max-width: 500px; 
+            margin: 0 auto; 
+        }
+        
+        h1 { 
+            text-align: center; 
+            margin-bottom: 40px; 
+            font-weight: 300;
+            font-size: 1.8em;
+            color: #666;
+        }
+        
+        .drop-zone {
+            border: 2px dashed #ddd;
+            padding: 40px 20px;
+            text-align: center;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            transition: all 0.2s ease;
+            background: white;
+        }
+        
+        .drop-zone:hover { 
+            border-color: #999; 
+        }
+        
+        .drop-zone.dragover { 
+            border-color: #007bff;
+            background: #f8f9ff;
+        }
+        
+        .drop-text {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        input[type="file"] { 
+            display: none; 
+        }
+        
+        .upload-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-weight: 500;
+        }
+        
+        .upload-btn:hover { 
+            background: #0056b3; 
+        }
+        
+        .progress { 
+            width: 100%;
+            height: 4px;
+            background: #e9ecef;
+            border-radius: 2px;
+            margin: 20px 0;
+            overflow: hidden;
+            display: none;
+        }
+        
+        .progress-bar { 
+            height: 100%;
+            background: #007bff;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .status { 
+            text-align: center;
+            margin: 20px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .status.success { color: #28a745; }
+        .status.error { color: #dc3545; }
+        
+        .file-list { 
+            margin-top: 30px; 
+        }
+        
+        .file-list-title {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        
+        .file-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #e9ecef;
+            font-size: 14px;
+        }
+        
+        .file-name {
+            color: #333;
+            flex: 1;
+        }
+        
+        .file-size {
+            color: #999;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        
+        .download-link {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        
+        .download-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Transferir Fotos</h1>
+        
+        <div class="drop-zone" id="dropZone">
+            <div class="drop-text">Arrastra archivos aquí o selecciona desde tu dispositivo</div>
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                Seleccionar Archivos
+            </button>
+            <input type="file" id="fileInput" multiple accept="image/*,video/*">
+        </div>
+        
+        <div class="progress" id="progressContainer">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        
+        <div class="status" id="status"></div>
+        
+        <div class="file-list" id="fileList"></div>
+    </div>
+    
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const status = document.getElementById('status');
+        const progressBar = document.getElementById('progressBar');
+        const progressContainer = document.getElementById('progressContainer');
+        
+        // Drag & Drop handlers
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) { 
+            e.preventDefault(); 
+            e.stopPropagation(); 
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'));
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'));
+        });
+        
+        dropZone.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', e => handleFiles(e.target.files));
+        
+        function handleDrop(e) { 
+            handleFiles(e.dataTransfer.files); 
+        }
+        
+        async function uploadFileChunked(file) {
+            const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            
+            for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                const start = chunkIndex * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const chunk = file.slice(start, end);
                 
-                <script>
-                    const dropZone = document.getElementById('dropZone');
-                    const fileInput = document.getElementById('fileInput');
-                    const status = document.getElementById('status');
-                    const progressBar = document.getElementById('progressBar');
-                    const progressContainer = document.getElementById('progressContainer');
+                const formData = new FormData();
+                formData.append('chunk', chunk);
+                formData.append('filename', file.name);
+                formData.append('chunkIndex', chunkIndex);
+                formData.append('totalChunks', totalChunks);
+                
+                const response = await fetch('/upload-chunk', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Error en chunk ${chunkIndex}`);
+                }
+                
+                // Update progress
+                const progress = ((chunkIndex + 1) / totalChunks) * 100;
+                progressBar.style.width = progress + '%';
+            }
+        }
+        
+        async function handleFiles(files) {
+            if (!files.length) return;
+            
+            progressContainer.style.display = 'block';
+            status.className = 'status';
+            
+            const totalFiles = files.length;
+            let completedFiles = 0;
+            
+            status.innerHTML = `Subiendo ${totalFiles} archivo${totalFiles > 1 ? 's' : ''}...`;
+            
+            try {
+                // Upload small files normally, large files in chunks
+                for (const file of files) {
+                    const fileSizeMB = file.size / (1024 * 1024);
                     
-                    // Drag & Drop
-                    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                        dropZone.addEventListener(eventName, preventDefaults, false);
-                    });
-                    
-                    function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
-                    
-                    ['dragenter', 'dragover'].forEach(eventName => {
-                        dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'));
-                    });
-                    
-                    ['dragleave', 'drop'].forEach(eventName => {
-                        dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'));
-                    });
-                    
-                    dropZone.addEventListener('drop', handleDrop);
-                    fileInput.addEventListener('change', e => handleFiles(e.target.files));
-                    
-                    function handleDrop(e) { handleFiles(e.dataTransfer.files); }
-                    
-                    async function uploadFileChunked(file) {
-                        const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
-                        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+                    if (fileSizeMB > 10) { // Files > 10MB use chunks
+                        await uploadFileChunked(file);
+                    } else {
+                        // Normal upload for small files
+                        const formData = new FormData();
+                        formData.append('files', file);
                         
-                        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-                            const start = chunkIndex * CHUNK_SIZE;
-                            const end = Math.min(start + CHUNK_SIZE, file.size);
-                            const chunk = file.slice(start, end);
-                            
-                            const formData = new FormData();
-                            formData.append('chunk', chunk);
-                            formData.append('filename', file.name);
-                            formData.append('chunkIndex', chunkIndex);
-                            formData.append('totalChunks', totalChunks);
-                            
-                            const response = await fetch('/upload-chunk', {
-                                method: 'POST',
-                                body: formData
-                            });
-                            
-                            if (!response.ok) {
-                                throw new Error(`Error en chunk ${chunkIndex}`);
-                            }
-                            
-                            // Actualizar progreso
-                            const progress = ((chunkIndex + 1) / totalChunks) * 100;
-                            progressBar.style.width = progress + '%';
-                        }
+                        await fetch('/upload-multiple', {
+                            method: 'POST',
+                            body: formData
+                        });
                     }
                     
-                    async function handleFiles(files) {
-                        if (!files.length) return;
-                        
-                        progressContainer.style.display = 'block';
-                        const totalFiles = files.length;
-                        let completedFiles = 0;
-                        
-                        status.innerHTML = `📤 Subiendo ${totalFiles} archivos...`;
-                        
-                        try {
-                            // Subir archivos pequeños normalmente, grandes por chunks
-                            for (const file of files) {
-                                const fileSizeMB = file.size / (1024 * 1024);
-                                
-                                if (fileSizeMB > 10) { // Archivos > 10MB usan chunks
-                                    await uploadFileChunked(file);
-                                } else {
-                                    // Upload normal para archivos pequeños
-                                    const formData = new FormData();
-                                    formData.append('files', file);
-                                    
-                                    await fetch('/upload-multiple', {
-                                        method: 'POST',
-                                        body: formData
-                                    });
-                                }
-                                
-                                completedFiles++;
-                                const overallProgress = (completedFiles / totalFiles) * 100;
-                                progressBar.style.width = overallProgress + '%';
-                                status.innerHTML = `📤 ${completedFiles}/${totalFiles} archivos completados...`;
-                            }
-                            
-                            status.innerHTML = `✅ ${totalFiles} archivos subidos correctamente`;
-                            loadFiles();
-                            
-                        } catch (error) {
-                            status.innerHTML = `❌ Error de conexión: ${error.message}`;
-                        }
-                        
-                        setTimeout(() => {
-                            progressContainer.style.display = 'none';
-                            progressBar.style.width = '0%';
-                        }, 2000);
-                    }
-                    
-                    async function loadFiles() {
-                        try {
-                            const response = await fetch('/api/files');
-                            const data = await response.json();
-                            
-                            const fileList = document.getElementById('fileList');
-                            fileList.innerHTML = data.files.map(file => `
-                                <div class="file-item">
-                                    <span>${file.name} (${file.size_formatted})</span>
-                                    <a href="/uploads/${file.original_name}" download 
-                                       style="color: #00ff88; text-decoration: none;">⬇️ Descargar</a>
+                    completedFiles++;
+                    const overallProgress = (completedFiles / totalFiles) * 100;
+                    progressBar.style.width = overallProgress + '%';
+                    status.innerHTML = `${completedFiles}/${totalFiles} archivos completados`;
+                }
+                
+                status.className = 'status success';
+                status.innerHTML = `${totalFiles} archivo${totalFiles > 1 ? 's subidos' : ' subido'} correctamente`;
+                loadFiles();
+                
+            } catch (error) {
+                status.className = 'status error';
+                status.innerHTML = `Error de conexión: ${error.message}`;
+            }
+            
+            setTimeout(() => {
+                progressContainer.style.display = 'none';
+                progressBar.style.width = '0%';
+            }, 2000);
+        }
+        
+        async function loadFiles() {
+            try {
+                const response = await fetch('/api/files');
+                const data = await response.json();
+                
+                const fileList = document.getElementById('fileList');
+                
+                if (data.files && data.files.length > 0) {
+                    fileList.innerHTML = `
+                        <div class="file-list-title">Archivos disponibles</div>
+                        ${data.files.map(file => `
+                            <div class="file-item">
+                                <div>
+                                    <div class="file-name">${file.name}</div>
                                 </div>
-                            `).join('');
-                        } catch (error) {
-                            console.error('Error loading files:', error);
-                        }
-                    }
-                    
-                    // Cargar archivos al inicio
-                    loadFiles();
-                </script>
-            </body>
-            </html>
+                                <div>
+                                    <span class="file-size">${file.size_formatted}</span>
+                                    <a href="/uploads/${file.original_name}" download class="download-link">
+                                        Descargar
+                                    </a>
+                                </div>
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    fileList.innerHTML = '';
+                }
+            } catch (error) {
+                console.error('Error loading files:', error);
+            }
+        }
+        
+        // Load files on page load
+        loadFiles();
+    </script>
+</body>
+</html>
             '''
         
         
