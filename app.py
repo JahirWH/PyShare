@@ -12,60 +12,241 @@ from PIL import Image
 import mimetypes
 import time
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
+from functools import wraps
+from collections import defaultdict
+import math
+from datetime import datetime, timedelta
+import logging
+
+class FileManager:
+    """Maneja operaciones de archivos de forma segura"""
+    
+    def __init__(self, upload_folder, max_size=500 * 1024 * 1024):
+        self.upload_folder = Path(upload_folder)
+        self.max_size = max_size
+        self.upload_folder.mkdir(exist_ok=True)
+        
+        # Extensiones permitidas
+        self.PHOTO_EXTENSIONS = {'jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'tiff', 'bmp', 'raw', 'dng'}
+        self.VIDEO_EXTENSIONS = {'mp4', 'mov', 'avi'}
+        self.ALLOWED_EXTENSIONS = self.PHOTO_EXTENSIONS.union(self.VIDEO_EXTENSIONS)
+        
+        # MIME types permitidos
+        self.ALLOWED_MIME_TYPES = {
+            'image/jpeg', 'image/png', 'image/heic', 'image/heif', 
+            'image/webp', 'image/tiff', 'image/bmp', 'image/x-canon-cr2',
+            'video/mp4', 'video/quicktime', 'video/x-msvideo'
+        }
+    
+    def validate_file(self, file):
+        """Valida archivo por extensión, MIME type y tamaño"""
+        if not file or not file.filename:
+            return False, "Archivo no válido"
+        
+        # Validar extensión
+        if not self.is_allowed_extension(file.filename):
+            return False, f"Extensión no permitida: {file.filename.split('.')[-1]}"
+        
+        # Validar tamaño
+        file.seek(0, 2)  # Ir al final
+        file_size = file.tell()
+        file.seek(0)  # Volver al inicio
+        
+        if file_size > self.max_size:
+            return False, f"Archivo demasiado grande: {self.format_size(file_size)}"
+        
+        # Validar MIME type usando mimetypes
+        try:
+            mime_type, _ = mimetypes.guess_type(file.filename)
+            if mime_type and mime_type not in self.ALLOWED_MIME_TYPES:
+                return False, f"Tipo de archivo no permitido: {mime_type}"
+        except Exception as e:
+            return False, f"Error validando archivo: {str(e)}"
+        
+        return True, "Archivo válido"
+    
+    def is_allowed_extension(self, filename):
+        """Verifica si la extensión está permitida"""
+        return '.' in filename and filename.rsplit('.', 1)[1].lower() in self.ALLOWED_EXTENSIONS
+    
+    def get_unique_filename(self, filename):
+        """Genera nombre único para evitar sobrescribir"""
+        filename = secure_filename(filename)
+        filepath = self.upload_folder / filename
+        
+        if not filepath.exists():
+            return filename
+        
+        # Generar nombre único
+        name, ext = os.path.splitext(filename)
+        counter = 1
+        while True:
+            new_filename = f"{name}_{counter}{ext}"
+            new_filepath = self.upload_folder / new_filename
+            if not new_filepath.exists():
+                return new_filename
+            counter += 1
+    
+    def save_file(self, file, filename):
+        """Guarda archivo de forma segura"""
+        try:
+            filepath = self.upload_folder / filename
+            
+            # Guardar con buffer optimizado
+            with open(filepath, 'wb') as f:
+                while True:
+                    chunk = file.stream.read(32768)  # 32KB chunks
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            
+            return True, f"Archivo guardado: {filename}"
+            
+        except Exception as e:
+            return False, f"Error guardando archivo: {str(e)}"
+    
+    def convert_heic_to_jpg(self, filepath):
+        """Convierte archivos HEIC a JPG automáticamente"""
+        try:
+            if filepath.suffix.lower() in ['.heic', '.heif']:
+                with Image.open(filepath) as img:
+                    # Convertir a RGB si es necesario
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    
+                    # Crear nuevo nombre con extensión .jpg
+                    jpg_path = filepath.with_suffix('.jpg')
+                    img.save(jpg_path, 'JPEG', quality=95)
+                    
+                    # Eliminar archivo HEIC original
+                    filepath.unlink()
+                    return jpg_path
+        except Exception as e:
+            print(f"Error convirtiendo HEIC: {e}")
+        
+        return filepath
+    
+    def format_size(self, bytes):
+        """Formatea tamaño de archivo de forma optimizada"""
+        if bytes == 0:
+            return "0B"
+        
+        size_names = ["B", "KB", "MB", "GB", "TB"]
+        i = int(math.floor(math.log(bytes, 1024)))
+        p = math.pow(1024, i)
+        s = round(bytes / p, 1)
+        return f"{s}{size_names[i]}"
+
+class RateLimiter:
+    """Implementa rate limiting básico"""
+    
+    def __init__(self, max_requests=10, window_seconds=60):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.requests = defaultdict(list)
+    
+    def is_allowed(self, client_ip):
+        """Verifica si el cliente puede hacer una nueva petición"""
+        now = datetime.now()
+        window_start = now - timedelta(seconds=self.window_seconds)
+        
+        # Limpiar requests antiguos
+        self.requests[client_ip] = [
+            req_time for req_time in self.requests[client_ip] 
+            if req_time > window_start
+        ]
+        
+        # Verificar límite
+        if len(self.requests[client_ip]) >= self.max_requests:
+            return False
+        
+        # Registrar nueva petición
+        self.requests[client_ip].append(now)
+        return True
 
 class PhotoTransferServer:
     def __init__(self):
         # Configuración
         self.UPLOAD_FOLDER = 'uploads'
-        self.MAX_SIZE = 500 * 1024 * 1024  # 500MB para permitir videos
         self.PORT = 8730
         self.CHUNK_SIZE = 32768  # 32KB
-        self.PHOTO_EXTENSIONS = {'jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'tiff', 'bmp', 'raw', 'dng'}
-        self.VIDEO_EXTENSIONS = {'mp4', 'mov', 'avi'}
-        self.ALLOWED_EXTENSIONS = self.PHOTO_EXTENSIONS.union(self.VIDEO_EXTENSIONS)
         
         # Variables de estado
         self.is_running = False
         self.server_thread = None
         self.stats = {'photos': 0, 'size': 0, 'uploads': 0}
         
-        # Crear directorio
-        Path(self.UPLOAD_FOLDER).mkdir(exist_ok=True)
+        # Inicializar componentes
+        self.file_manager = FileManager(self.UPLOAD_FOLDER)
+        self.rate_limiter = RateLimiter(max_requests=20, window_seconds=60)
+        
+        # Configurar logging
+        self.setup_logging()
         
         # Configurar Flask
         self.setup_flask()
         self.setup_gui()
+    
+    def setup_logging(self):
+        """Configura el sistema de logging"""
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler('pyshare.log'),
+                logging.StreamHandler()
+            ]
+        )
+        self.logger = logging.getLogger(__name__)
+    
+    def rate_limit(self, f):
+        """Decorator para rate limiting"""
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            client_ip = request.remote_addr
+            if not self.rate_limiter.is_allowed(client_ip):
+                self.logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+                return jsonify({'error': 'Demasiadas peticiones. Intenta más tarde.'}), 429
+            return f(*args, **kwargs)
+        return decorated_function
         
     def setup_flask(self):
         """Configura el servidor Flask optimizado"""
         self.app = Flask(__name__, static_url_path='', static_folder='.')
-        self.app.config['MAX_CONTENT_LENGTH'] = self.MAX_SIZE
+        self.app.config['MAX_CONTENT_LENGTH'] = self.file_manager.max_size
         self.app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Evitar cache
         self.app.config['JSON_SORT_KEYS'] = False  # Mejorar performance JSON
         self.executor = ThreadPoolExecutor(max_workers=4)
         
         # Rutas optimizadas
         @self.app.route('/api/files')
+        @self.rate_limit
         def api_files():
-            files = []
-            upload_path = Path(self.UPLOAD_FOLDER)
-            
-            if upload_path.exists():
-                for item in upload_path.iterdir():
-                    if item.is_file() and self.is_photo(item.name):
-                        size = item.stat().st_size
-                        # Determinar el icono basado en la extensión
-                        icon = "🎥" if item.suffix.lower() in ['.mp4', '.mov', '.avi'] else "📸"
-                        files.append({
-                            'name': f"{icon} {item.name}",
-                            'size': size,
-                            'size_formatted': self.format_size(size),
-                            'modified': item.stat().st_mtime,
-                            'original_name': item.name
-                        })
-            
-            files.sort(key=lambda x: x['modified'], reverse=True)
-            return jsonify({'files': files, 'count': len(files)})
+            try:
+                files = []
+                upload_path = self.file_manager.upload_folder
+                
+                if upload_path.exists():
+                    for item in upload_path.iterdir():
+                        if item.is_file() and self.file_manager.is_allowed_extension(item.name):
+                            size = item.stat().st_size
+                            # Determinar el icono basado en la extensión
+                            icon = "🎥" if item.suffix.lower() in ['.mp4', '.mov', '.avi'] else "📸"
+                            files.append({
+                                'name': f"{icon} {item.name}",
+                                'size': size,
+                                'size_formatted': self.file_manager.format_size(size),
+                                'modified': item.stat().st_mtime,
+                                'original_name': item.name
+                            })
+                
+                files.sort(key=lambda x: x['modified'], reverse=True)
+                return jsonify({'files': files, 'count': len(files)})
+                
+            except Exception as e:
+                self.logger.error(f"Error obteniendo archivos: {e}")
+                return jsonify({'error': f'Error obteniendo archivos: {str(e)}'}), 500
 
         @self.app.route('/')
         def index():
@@ -400,130 +581,151 @@ class PhotoTransferServer:
         
         
         @self.app.route('/upload-multiple', methods=['POST'])
+        @self.rate_limit
         def upload_multiple():
-            files = request.files.getlist('files')
-            uploaded = []
-            
-            # Procesar archivos en paralelo usando ThreadPoolExecutor
-            def save_file(file):
-                if file and self.is_photo(file.filename):
-                    filename = secure_filename(file.filename)
-                    filepath = Path(self.UPLOAD_FOLDER) / filename
-                    
-                    # Evitar sobrescribir
-                    counter = 1
-                    original_name = filename
-                    while filepath.exists():
-                        name, ext = os.path.splitext(original_name)
-                        filename = f"{name}_{counter}{ext}"
-                        filepath = Path(self.UPLOAD_FOLDER) / filename
-                        counter += 1
-                    
-                    # Guardar con buffer optimizado
-                    with open(filepath, 'wb') as f:
-                        while True:
-                            chunk = file.stream.read(self.CHUNK_SIZE)
-                            if not chunk:
-                                break
-                            f.write(chunk)
-                    
-                    self.stats['uploads'] += 1
-                    return filename
-                return None
-            
-            # Usar ThreadPoolExecutor para procesar archivos en paralelo
-            with ThreadPoolExecutor(max_workers=3) as executor:
-                futures = [executor.submit(save_file, file) for file in files]
-                for future in futures:
-                    result = future.result()
-                    if result:
-                        uploaded.append(result)
-            
-            self.update_stats()
-            return jsonify({
-                'message': f'{len(uploaded)} archivos subidos correctamente',
-                'files': uploaded
-            })
+            try:
+                files = request.files.getlist('files')
+                if not files:
+                    return jsonify({'error': 'No se recibieron archivos'}), 400
+                
+                uploaded = []
+                errors = []
+                
+                # Procesar archivos en paralelo usando ThreadPoolExecutor
+                def process_file(file):
+                    try:
+                        # Validar archivo
+                        is_valid, message = self.file_manager.validate_file(file)
+                        if not is_valid:
+                            return None, message
+                        
+                        # Obtener nombre único
+                        filename = self.file_manager.get_unique_filename(file.filename)
+                        
+                        # Guardar archivo
+                        success, message = self.file_manager.save_file(file, filename)
+                        if not success:
+                            return None, message
+                        
+                        # Convertir HEIC a JPG si es necesario
+                        filepath = self.file_manager.upload_folder / filename
+                        converted_path = self.file_manager.convert_heic_to_jpg(filepath)
+                        final_filename = converted_path.name
+                        
+                        self.stats['uploads'] += 1
+                        return final_filename, None
+                        
+                    except Exception as e:
+                        return None, f"Error procesando archivo: {str(e)}"
+                
+                # Usar ThreadPoolExecutor para procesar archivos en paralelo
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    futures = [executor.submit(process_file, file) for file in files]
+                    for future in futures:
+                        result, error = future.result()
+                        if result:
+                            uploaded.append(result)
+                        elif error:
+                            errors.append(error)
+                
+                self.update_stats()
+                
+                response_data = {
+                    'message': f'{len(uploaded)} archivos subidos correctamente',
+                    'files': uploaded
+                }
+                
+                if errors:
+                    response_data['errors'] = errors
+                    response_data['message'] += f', {len(errors)} errores'
+                
+                return jsonify(response_data)
+                
+            except Exception as e:
+                self.logger.error(f"Error en upload_multiple: {e}")
+                return jsonify({'error': f'Error interno del servidor: {str(e)}'}), 500
         
         @self.app.route('/upload-chunk', methods=['POST'])
+        @self.rate_limit
         def upload_chunk():
             """Upload por chunks para archivos grandes"""
-            chunk = request.files.get('chunk')
-            filename = request.form.get('filename')
-            chunk_index = int(request.form.get('chunkIndex', 0))
-            total_chunks = int(request.form.get('totalChunks', 1))
-            
-            if not chunk or not filename:
-                return jsonify({'error': 'Datos incompletos'}), 400
-            
-            filename = secure_filename(filename)
-            temp_dir = Path(self.UPLOAD_FOLDER) / 'temp'
-            temp_dir.mkdir(exist_ok=True)
-            
-            # Guardar chunk temporal
-            chunk_path = temp_dir / f"{filename}.part{chunk_index}"
-            chunk.save(chunk_path)
-            
-            # Si es el último chunk, ensamblar archivo
-            if chunk_index == total_chunks - 1:
-                final_path = Path(self.UPLOAD_FOLDER) / filename
+            try:
+                chunk = request.files.get('chunk')
+                filename = request.form.get('filename')
+                chunk_index = int(request.form.get('chunkIndex', 0))
+                total_chunks = int(request.form.get('totalChunks', 1))
                 
-                # Evitar sobrescribir
-                counter = 1
-                original_name = filename
-                while final_path.exists():
-                    name, ext = os.path.splitext(original_name)
-                    filename = f"{name}_{counter}{ext}"
-                    final_path = Path(self.UPLOAD_FOLDER) / filename
-                    counter += 1
+                if not chunk or not filename:
+                    return jsonify({'error': 'Datos incompletos'}), 400
                 
-                # Ensamblar chunks
-                with open(final_path, 'wb') as final_file:
-                    for i in range(total_chunks):
-                        chunk_file = temp_dir / f"{original_name}.part{i}"
-                        if chunk_file.exists():
-                            with open(chunk_file, 'rb') as cf:
-                                final_file.write(cf.read())
-                            chunk_file.unlink()  # Eliminar chunk temporal
+                filename = secure_filename(filename)
+                temp_dir = self.file_manager.upload_folder / 'temp'
+                temp_dir.mkdir(exist_ok=True)
                 
-                self.stats['uploads'] += 1
-                self.update_stats()
-                return jsonify({'message': 'Archivo subido correctamente', 'filename': filename})
-            
-            return jsonify({'message': f'Chunk {chunk_index + 1}/{total_chunks} recibido'})
+                # Guardar chunk temporal
+                chunk_path = temp_dir / f"{filename}.part{chunk_index}"
+                chunk.save(chunk_path)
+                
+                # Si es el último chunk, ensamblar archivo
+                if chunk_index == total_chunks - 1:
+                    # Obtener nombre único
+                    filename = self.file_manager.get_unique_filename(filename)
+                    final_path = self.file_manager.upload_folder / filename
+                    
+                    # Ensamblar chunks
+                    with open(final_path, 'wb') as final_file:
+                        for i in range(total_chunks):
+                            chunk_file = temp_dir / f"{secure_filename(request.form.get('filename'))}.part{i}"
+                            if chunk_file.exists():
+                                with open(chunk_file, 'rb') as cf:
+                                    final_file.write(cf.read())
+                                chunk_file.unlink()  # Eliminar chunk temporal
+                    
+                    # Convertir HEIC a JPG si es necesario
+                    converted_path = self.file_manager.convert_heic_to_jpg(final_path)
+                    final_filename = converted_path.name
+                    
+                    self.stats['uploads'] += 1
+                    self.update_stats()
+                    return jsonify({'message': 'Archivo subido correctamente', 'filename': final_filename})
+                
+                return jsonify({'message': f'Chunk {chunk_index + 1}/{total_chunks} recibido'})
+                
+            except Exception as e:
+                self.logger.error(f"Error en upload_chunk: {e}")
+                return jsonify({'error': f'Error procesando chunk: {str(e)}'}), 500
 
         @self.app.route('/uploads/<filename>')
         def download_file(filename):
-            return send_from_directory(self.UPLOAD_FOLDER, filename, as_attachment=True)
+            return send_from_directory(self.file_manager.upload_folder, filename, as_attachment=True)
     
-    def is_photo(self, filename):
-        return '.' in filename and filename.rsplit('.', 1)[1].lower() in self.ALLOWED_EXTENSIONS
-    
-    def format_size(self, bytes):
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if bytes < 1024:
-                return f"{bytes:.1f}{unit}"
-            bytes /= 1024
-        return f"{bytes:.1f}TB"
     
     def get_local_ip(self):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.connect(("8.8.8.8", 80))
-                return s.getsockname()[0]
-        except Exception:
-            return "127.0.0.1"
+        """Obtiene IP local de forma optimizada con cache"""
+        if not hasattr(self, '_cached_ip'):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                    s.connect(("8.8.8.8", 80))
+                    self._cached_ip = s.getsockname()[0]
+            except Exception:
+                self._cached_ip = "127.0.0.1"
+        return self._cached_ip
     
     def update_stats(self):
-        upload_path = Path(self.UPLOAD_FOLDER)
-        if upload_path.exists():
-            photos = list(upload_path.glob('*.*'))
-            self.stats['photos'] = len([p for p in photos if p.is_file()])
-            self.stats['size'] = sum(p.stat().st_size for p in photos if p.is_file())
-        
-        # Actualizar GUI si existe
-        if hasattr(self, 'update_gui_stats'):
-            self.root.after(0, self.update_gui_stats)
+        """Actualiza estadísticas de forma optimizada"""
+        try:
+            upload_path = self.file_manager.upload_folder
+            if upload_path.exists():
+                photos = list(upload_path.glob('*.*'))
+                self.stats['photos'] = len([p for p in photos if p.is_file()])
+                self.stats['size'] = sum(p.stat().st_size for p in photos if p.is_file())
+            
+            # Actualizar GUI si existe
+            if hasattr(self, 'update_gui_stats'):
+                self.root.after(0, self.update_gui_stats)
+                
+        except Exception as e:
+            self.logger.error(f"Error actualizando estadísticas: {e}")
     
     def setup_gui(self):
         """Configura la interfaz gráfica"""
@@ -555,7 +757,7 @@ class PhotoTransferServer:
         self.ip_label = ttk.Label(info_frame, text=f"🌐 IP Local: {self.get_local_ip()}:{self.PORT}", style='Info.TLabel')
         self.ip_label.pack(anchor=tk.W, padx=10, pady=5)
         
-        self.folder_label = ttk.Label(info_frame, text=f" Carpeta: {Path(self.UPLOAD_FOLDER).absolute()}", style='Info.TLabel')
+        self.folder_label = ttk.Label(info_frame, text=f" Carpeta: {self.file_manager.upload_folder.absolute()}", style='Info.TLabel')
         self.folder_label.pack(anchor=tk.W, padx=10, pady=5)
         
         self.status_label = ttk.Label(info_frame, text="⏹️ Estado: Detenido", style='Info.TLabel')
@@ -665,7 +867,7 @@ class PhotoTransferServer:
     
     def open_folder(self):
         """Abre la carpeta de uploads"""
-        folder_path = Path(self.UPLOAD_FOLDER).absolute()
+        folder_path = self.file_manager.upload_folder.absolute()
         if os.name == 'nt':  # Windows
             os.startfile(folder_path)
         else:  # macOS/Linux
@@ -674,7 +876,7 @@ class PhotoTransferServer:
     def update_gui_stats(self):
         """Actualiza las estadísticas en la GUI"""
         self.photos_label.configure(text=f" Fotos: {self.stats['photos']}")
-        self.size_label.configure(text=f" Tamaño total: {self.format_size(self.stats['size'])}")
+        self.size_label.configure(text=f" Tamaño total: {self.file_manager.format_size(self.stats['size'])}")
         self.uploads_label.configure(text=f"📤 Subidas: {self.stats['uploads']}")
     
     def on_closing(self):

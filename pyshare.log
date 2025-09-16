@@ -1,0 +1,10 @@
+2025-09-15 22:27:59,649 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8730
+ * Running on http://172.20.10.10:8730
+2025-09-15 22:27:59,649 - INFO - [33mPress CTRL+C to quit[0m
+2025-09-15 22:28:04,548 - INFO - 127.0.0.1 - - [15/Sep/2025 22:28:04] "GET / HTTP/1.1" 200 -
+2025-09-15 22:28:04,774 - INFO - 127.0.0.1 - - [15/Sep/2025 22:28:04] "GET /api/files HTTP/1.1" 200 -
+2025-09-15 22:28:04,824 - INFO - 127.0.0.1 - - [15/Sep/2025 22:28:04] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-15 22:28:11,640 - INFO - 127.0.0.1 - - [15/Sep/2025 22:28:11] "POST /upload-multiple HTTP/1.1" 200 -
+2025-09-15 22:28:11,669 - INFO - 127.0.0.1 - - [15/Sep/2025 22:28:11] "GET /api/files HTTP/1.1" 200 -
