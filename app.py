@@ -141,7 +141,7 @@ class FileManager:
 class RateLimiter:
     """Implementa rate limiting básico"""
     
-    def __init__(self, max_requests=10, window_seconds=60):
+    def __init__(self, max_requests=600, window_seconds=60):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.requests = defaultdict(list)
@@ -179,7 +179,7 @@ class PhotoTransferServer:
         
         # Inicializar componentes
         self.file_manager = FileManager(self.UPLOAD_FOLDER)
-        self.rate_limiter = RateLimiter(max_requests=20, window_seconds=60)
+        self.rate_limiter = RateLimiter(max_requests=600, window_seconds=60)
         
         # Configurar logging
         self.setup_logging()
@@ -221,7 +221,6 @@ class PhotoTransferServer:
         
         # Rutas optimizadas
         @self.app.route('/api/files')
-        @self.rate_limit
         def api_files():
             try:
                 files = []
