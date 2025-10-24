@@ -18,6 +18,8 @@ from collections import defaultdict
 import math
 from datetime import datetime, timedelta
 import logging
+from tkinter import StringVar, IntVar
+
 
 
 class FileManager:
@@ -227,6 +229,50 @@ class PhotoTransferServer:
         except Exception as e:
             self.logger.error(f"Error guardando config: {e}")
             return False
+
+    def apply_max_size(self):
+        """
+        Lee el valor del combo o entrada personalizada, valida y aplica el nuevo max_size.
+        """
+        try:
+            # Preferir valor de entry si tiene algo, sino el combobox
+            val_text = self.max_entry.get().strip() or self.max_combo.get().strip()
+            if not val_text:
+                messagebox.showwarning("Atención", "Introduce un valor en MB en el combo o en la entrada.")
+                return
+
+            # Aceptar decimales si existen (float)
+            try:
+                val_mb = float(val_text)
+            except ValueError:
+                messagebox.showerror("Error", "Valor no válido. Ingresa un número (MB).")
+                return
+
+            # Validaciones
+            MIN_MB = 1
+            MAX_MB = 10240  # 10 GB por ejemplo
+            if val_mb < MIN_MB or val_mb > MAX_MB:
+                messagebox.showerror("Error", f"Valor fuera de rango. Debe estar entre {MIN_MB} MB y {MAX_MB} MB.")
+                return
+
+            # Convertir a bytes e aplicar
+            new_max_bytes = int(val_mb * 1024 * 1024)
+            old = self.file_manager.max_size
+            self.file_manager.max_size = new_max_bytes
+            self.app.config['MAX_CONTENT_LENGTH'] = new_max_bytes
+
+            # Guardar en config
+            cfg = {'max_size_mb': val_mb}
+            self.save_config(cfg)
+
+            # Actualizar GUI y log
+            self.current_limit_label.configure(text=f"Actual: {self.file_manager.format_size(self.file_manager.max_size)}")
+            self.log(f"Límite actualizado: {val_mb} MB (antes {self.file_manager.format_size(old)})")
+            messagebox.showinfo("Éxito", f"Límite actualizado a {val_mb} MB")
+
+        except Exception as e:
+            self.logger.error(f"Error aplicando límite: {e}")
+            messagebox.showerror("Error", f"No se pudo aplicar el límite:\n{e}")
 
     
     def setup_logging(self):
@@ -767,7 +813,6 @@ class PhotoTransferServer:
         except Exception as e:
             self.logger.error(f"Error actualizando estadísticas: {e}")
     
-from tkinter import StringVar, IntVar
 
     def setup_gui(self):
         """Configura la interfaz gráfica"""
@@ -777,33 +822,7 @@ from tkinter import StringVar, IntVar
         self.root.configure(bg='#2c3e50')
         
 
-        # --- Variables GUI para límite ---
-        self.max_size_var = IntVar(value=int(self.file_manager.max_size / (1024 * 1024)))  # en MB
-        self.max_size_options = ['50', '100', '200', '500', '1024', '2048']  # valores comunes en MB
-
-        # Contenedor para límite
-        limit_frame = tk.Frame(main_frame, bg='#2c3e50')
-        limit_frame.pack(fill=tk.X, pady=(0, 10))
-
-        ttk.Label(limit_frame, text="Límite por archivo (MB):", style='Info.TLabel').pack(side=tk.LEFT, padx=(0,8))
-
-        self.max_combo = ttk.Combobox(limit_frame, values=self.max_size_options, width=8)
-        self.max_combo.set(str(self.max_size_var.get()))
-        self.max_combo.pack(side=tk.LEFT)
-
-        # Entrada personalizada
-        self.max_entry = ttk.Entry(limit_frame, width=8)
-        self.max_entry.insert(0, "")
-        self.max_entry.pack(side=tk.LEFT, padx=(8,0))
-
-        # Botón aplicar
-        apply_btn = ttk.Button(limit_frame, text="Aplicar límite", command=self.apply_max_size)
-        apply_btn.pack(side=tk.LEFT, padx=(8,0))
-
-        # Etiqueta que muestra límite actual
-        self.current_limit_label = ttk.Label(limit_frame, text=f"Actual: {self.file_manager.format_size(self.file_manager.max_size)}", style='Info.TLabel')
-        self.current_limit_label.pack(side=tk.LEFT, padx=(12,0))
-
+       
         
         # Estilos
         style = ttk.Style()
@@ -869,6 +888,34 @@ from tkinter import StringVar, IntVar
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
         
+        
+         # --- Variables GUI para límite ---
+        self.max_size_var = IntVar(value=int(self.file_manager.max_size / (1024 * 1024)))  # en MB
+        self.max_size_options = ['50', '100', '200', '500', '1024', '2048']  # valores comunes en MB
+
+        # Contenedor para límite
+        limit_frame = tk.Frame(main_frame, bg='#2c3e50')
+        limit_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(limit_frame, text="Límite por archivo (MB):", style='Info.TLabel').pack(side=tk.LEFT, padx=(0,8))
+
+        self.max_combo = ttk.Combobox(limit_frame, values=self.max_size_options, width=8)
+        self.max_combo.set(str(self.max_size_var.get()))
+        self.max_combo.pack(side=tk.LEFT)
+
+        # Entrada personalizada
+        self.max_entry = ttk.Entry(limit_frame, width=8)
+        self.max_entry.insert(0, "")
+        self.max_entry.pack(side=tk.LEFT, padx=(8,0))
+
+        # Botón aplicar
+        apply_btn = ttk.Button(limit_frame, text="Aplicar límite", command=self.apply_max_size)
+        apply_btn.pack(side=tk.LEFT, padx=(8,0))
+
+        # Etiqueta que muestra límite actual
+        self.current_limit_label = ttk.Label(limit_frame, text=f"Actual: {self.file_manager.format_size(self.file_manager.max_size)}", style='Info.TLabel')
+        self.current_limit_label.pack(side=tk.LEFT, padx=(12,0))
+
         # Inicializar estadísticas
         self.update_stats()
         
