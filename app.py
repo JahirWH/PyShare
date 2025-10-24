@@ -22,9 +22,10 @@ import logging
 class FileManager:
     """Maneja operaciones de archivos de forma segura"""
     
-    def __init__(self, upload_folder, max_size=500 * 1024 * 1024):
+    def __init__(self, upload_folder, max_size_mb=500):
+        self.max_size = max_size_mb * 1024 * 1024
         self.upload_folder = Path(upload_folder)
-        self.max_size = max_size
+        # self.max_size = max_size
         self.upload_folder.mkdir(exist_ok=True)
         
         # Extensiones permitidas
@@ -124,6 +125,7 @@ class FileManager:
                     return jpg_path
         except Exception as e:
             print(f"Error convirtiendo HEIC: {e}")
+            
         
         return filepath
     
