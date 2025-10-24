@@ -19,14 +19,22 @@ import math
 from datetime import datetime, timedelta
 import logging
 
+
 class FileManager:
     """Maneja operaciones de archivos de forma segura"""
     
     def __init__(self, upload_folder, max_size_mb=500):
-        self.max_size = max_size_mb * 1024 * 1024
+        # self.max_size = max_size_mb * 1024 * 1024
         self.upload_folder = Path(upload_folder)
         # self.max_size = max_size
-        self.upload_folder.mkdir(exist_ok=True)
+        # self.upload_folder.mkdir(exist_ok=True)
+        
+        if isinstance(max_size_mb, (int, float)) and max_size_mb > 1024*1024:
+                self.max_size = int(max_size_mb)
+        else:
+            # asumimos MB
+            self.max_size = int(max_size_mb * 1024 * 1024)
+            self.upload_folder.mkdir(exist_ok=True)
         
         # Extensiones permitidas
         self.PHOTO_EXTENSIONS = {'jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'tiff', 'bmp', 'raw', 'dng'}
@@ -167,9 +175,12 @@ class RateLimiter:
         self.requests[client_ip].append(now)
         return True
 
+import json
+
 class PhotoTransferServer:
     def __init__(self):
         # Configuración
+        self.CONFIG_FILE = Path('config.json')
         self.UPLOAD_FOLDER = 'uploads'
         self.PORT = 8730
         self.CHUNK_SIZE = 32768  # 32KB
@@ -180,6 +191,10 @@ class PhotoTransferServer:
         self.stats = {'photos': 0, 'size': 0, 'uploads': 0}
         
         # Inicializar componentes
+        cfg = self.load_config()
+        max_size_mb = cfg.get('max_size_mb', 500)
+        
+        self.file_manager = FileManager(self.UPLOAD_FOLDER, max_size_mb=max_size_mb)
         self.file_manager = FileManager(self.UPLOAD_FOLDER)
         self.rate_limiter = RateLimiter(max_requests=600, window_seconds=60)
         
@@ -189,6 +204,30 @@ class PhotoTransferServer:
         # Configurar Flask
         self.setup_flask()
         self.setup_gui()
+        
+        
+        # Configuracion carga
+    def load_config(self):
+        """Carga configuración desde config.json"""
+        try:
+            if self.CONFIG_FILE.exists():
+                with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            self.logger and self.logger.warning(f"No se pudo cargar config: {e}")
+        # Valores por defecto
+        return {'max_size_mb': 500}
+
+    def save_config(self, config):
+        """Guarda configuración en config.json"""
+        try:
+            with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2)
+            return True
+        except Exception as e:
+            self.logger.error(f"Error guardando config: {e}")
+            return False
+
     
     def setup_logging(self):
         """Configura el sistema de logging"""
@@ -728,12 +767,43 @@ class PhotoTransferServer:
         except Exception as e:
             self.logger.error(f"Error actualizando estadísticas: {e}")
     
+from tkinter import StringVar, IntVar
+
     def setup_gui(self):
         """Configura la interfaz gráfica"""
         self.root = tk.Tk()
         self.root.title(" Servidor de Transferencia de Fotos")
         self.root.geometry("600x500")
         self.root.configure(bg='#2c3e50')
+        
+
+        # --- Variables GUI para límite ---
+        self.max_size_var = IntVar(value=int(self.file_manager.max_size / (1024 * 1024)))  # en MB
+        self.max_size_options = ['50', '100', '200', '500', '1024', '2048']  # valores comunes en MB
+
+        # Contenedor para límite
+        limit_frame = tk.Frame(main_frame, bg='#2c3e50')
+        limit_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(limit_frame, text="Límite por archivo (MB):", style='Info.TLabel').pack(side=tk.LEFT, padx=(0,8))
+
+        self.max_combo = ttk.Combobox(limit_frame, values=self.max_size_options, width=8)
+        self.max_combo.set(str(self.max_size_var.get()))
+        self.max_combo.pack(side=tk.LEFT)
+
+        # Entrada personalizada
+        self.max_entry = ttk.Entry(limit_frame, width=8)
+        self.max_entry.insert(0, "")
+        self.max_entry.pack(side=tk.LEFT, padx=(8,0))
+
+        # Botón aplicar
+        apply_btn = ttk.Button(limit_frame, text="Aplicar límite", command=self.apply_max_size)
+        apply_btn.pack(side=tk.LEFT, padx=(8,0))
+
+        # Etiqueta que muestra límite actual
+        self.current_limit_label = ttk.Label(limit_frame, text=f"Actual: {self.file_manager.format_size(self.file_manager.max_size)}", style='Info.TLabel')
+        self.current_limit_label.pack(side=tk.LEFT, padx=(12,0))
+
         
         # Estilos
         style = ttk.Style()
